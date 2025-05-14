@@ -1,1 +1,294 @@
-# Salut
+---
+title: "Forecasting Traffic at Sensor 198"
+author: "Ana Blanco Lara, Imen Rabouhi Announ, Xavier Dubrul & Camille Toan"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tsibble)
+library(lubridate)
+library(fable)
+library(feasts)
+library(readr)
+library(scales)
+```
+
+# Step 1: Exploration and Visualization
+
+```{r}
+# Load the data
+df <- read_csv("~/Desktop/Forecasting/traffic_data.csv")
+df <- df[-1, ]  # Remove first row with sensor URLs
+
+# Convert to proper format
+df <- df %>%
+  mutate(
+    datetime = dmy_hm(Time),
+    traffic = as.numeric(Sensor198)
+    ) %>%
+  select(datetime, traffic) %>%
+  as_tsibble(index = datetime)
+
+# Full time series
+df %>% autoplot(traffic) + labs(title = "Traffic at Sensor 198", y = "Volume")
+
+
+# Monthly seasonality
+df %>% gg_season(traffic, period = "month")
+
+
+df_monthly$month <- as.Date(df_monthly$month)
+
+
+# Ensure datetime is in correct format
+df <- df %>%
+  mutate(datetime = as.POSIXct(datetime))
+
+# Aggregate monthly mean traffic
+df_monthly <- df %>%
+  filter(year(datetime) == 2015) %>%
+  mutate(month = floor_date(datetime, unit = "month")) %>%
+  group_by(month) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot monthly mean traffic
+ggplot(df_monthly, aes(x = month, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 2) +
+  labs(
+    title = "Monthly Mean Traffic – 2015",
+    x = "Month",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# Weekly seasonality
+
+df %>% gg_season(traffic, period = "week")
+
+# Step 1: Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2015-06-01") & datetime < as.POSIXct("2015-06-29")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
+
+# Step 2: Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – June 2015 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text = element_text(size = 7)
+  )
+
+# Step 1: Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2015-10-05") & datetime < as.POSIXct("2015-11-02")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
+
+# Step 2: Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – October 2015 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text = element_text(size = 7)
+  )
+
+# Step 1: Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2015-08-31") & datetime < as.POSIXct("2015-09-28")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
+
+# Step 2: Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – September 2015 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text = element_text(size = 7)
+  )
+
+
+# Daily seasonality 
+
+# Filter for a random week in the middle of September 2015 and extract weekday + hour
+df_week <- df %>%
+  filter(datetime >= as.POSIXct("2015-09-15") & datetime < as.POSIXct("2015-09-22")) %>%
+  mutate(
+    weekday = factor(weekdays(datetime),
+        levels = c("Monday", "Tuesday", "Wednesday", "Thursday",
+                                "Friday", "Saturday", "Sunday")),
+    weekday_num = as.numeric(weekday),  
+    offset_traffic = traffic + (7 - weekday_num) * 0.15,
+    hour = hour(datetime)
+  )
+
+# Plot: hourly traffic per day (faceted by weekday)
+ggplot(df_week, aes(x = hour, y = traffic)) +
+  geom_line() +
+  facet_wrap(~ weekday, ncol = 3) +
+  labs(
+    title = "Hourly Traffic by Day – Week in the middle of September 2015",
+    x = "Hour of Day", y = "Traffic"
+  ) +
+  theme_minimal()+
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    strip.text = element_text(size = 8),
+    axis.text.x = element_text(size = 8)
+)
+
+
+# Traffic distribution 
+ggplot(df, aes(x = traffic)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Traffic Values", x = "Traffic", y = "Count") +
+  theme_minimal()
+
+
+
+# ACF
+df %>% ACF(traffic) %>% autoplot()
+```
+
+In this first step, we start by loading and plotting the traffic data by hour from Sensor 198 to find some patterns.
+
+The initial time series plot shows clear weekly and daily seasonality:
+
+The traffic tends to be more dense on commuting hours on weekdays, which we expected from the start, showing the higher volume of traffic due to people going to and from their office in the morning and evening (around 9am and 4pm). This is a trend we could already predict given the data was all gathered from before the COVID-19 pandemic and people would rarely choose or even be given the option of work from home. On weekends we see much less traffic, especially on Sunday. Furthermore, the traffic on week-ends is much more constant.
+
+To get a better overview of the distribution of the traffic we have also included a simple graph showing the most frequent normalized traffic volume. As a result we can see that the most common is 0.05.
+
+Finally, the autocorrelation function (ACF) plot confirms these patterns, it shows strong autocorrelation at lags corresponding to 24 hours (daily). This means that the series is highly seasonal and autocorrelated, which is why we have decided to apply a SARIMA model.
+
+```{r}
+zero_traffic <- df %>% filter(traffic == 0)
+print(zero_traffic)
+```
+
+# Step 2: Cleaning and Wrangling
+
+```{r}
+
+traffic_ts <- df |>
+  transmute(
+    time = dmy_hm(datetime),
+    sensor198 = as.numeric("sensor198_data")
+  ) |>
+  filter(!is.na(datetime) & !is.na(sensor198))
+
+traffic_tsibble <- df %>%
+  as_tsibble(index = datetime)
+
+print(traffic_tsibble)
+
+library(feasts)
+library(fabletools)
+
+stl_decomp <- traffic_tsibble |>
+  model(stl = STL(traffic_ts))
+
+stl_decomp |>
+  components() |>
+  autoplot()
+
+
+
+# L'un ou l'autre:
+
+# Fill missing timestamps
+traffic_tsibble <- traffic_tsibble %>% fill_gaps()
+
+# STL decomposition for trend & outliers
+decomp <- traffic_tsibble %>%
+  model(STL(traffic ~ season(window = "periodic"), robust = TRUE)) %>%
+  components()
+
+# Plot components
+decomp %>% autoplot()
+```
+
+To better understand and clean the time series, we apply STL decomposition with three seasonal components: annual, weekly, and daily. We use a robust estimation procedure to reduce the influence of extreme outliers. The decomposition reveals a steadily increasing trend over the two-year period, suggesting that overall traffic at Sensor 198 slightly increased over time. The weekly and daily seasonal components are both strong and stable, with the weekly pattern confirming lower traffic on weekends, and the daily pattern showing the expected rise during commuting hours. The remainder component still contains some variability, indicating occasional irregular fluctuations or localized anomalies that may not follow a consistent seasonal or trend pattern. This decomposition validates our earlier visual observations and confirms the presence of both weekly and daily seasonality, justifying the use of seasonal models in the next step.
+
+# Step 3: Modeling
+
+```{r}
+# Exponential Smoothing
+fit_ets <- df %>% model(ETS(traffic))
+
+# ARIMA
+fit_arima <- df %>% model(ARIMA(traffic))
+
+# Time Series Linear Model
+fit_tslm <- df %>% model(TSLM(traffic ~ trend() + season("day")))
+
+# Summaries
+report(fit_ets)
+report(fit_arima)
+report(fit_tslm)
+```
+
+# Step 4: Forecast and Validation
+
+```{r}
+# Split data: training set up to Dec 31, 2016
+df_train <- df %>% filter(datetime < ymd("2017-01-01"))
+
+# Fit models on training set
+fit_arima <- df_train %>% model(ARIMA(traffic))
+fit_ets   <- df_train %>% model(ETS(traffic))
+fit_tslm  <- df_train %>% model(TSLM(traffic ~ trend() + season("day")))
+
+# Forecast 744 hours (Jan 2017) with 95% intervals
+fc_arima <- fit_arima %>% forecast(h = "744 hours", level = 95)
+fc_ets   <- fit_ets   %>% forecast(h = "744 hours", level = 95)
+fc_tslm  <- fit_tslm  %>% forecast(h = "744 hours", level = 95)
+
+# Plot ARIMA forecast
+fc_arima %>% autoplot(df) + labs(title = "ARIMA Forecast for January 2017")
+
+# Convert to required format
+fc_arima_unpacked <- fc_arima %>%
+  hilo() %>%
+  unpack_hilo(`95%`)
+
+final_fc <- fc_arima_unpacked %>%
+  as_tibble() %>%
+  transmute(
+    datetime = as.character(datetime),
+    forecast = .mean,
+    upper_97.5 = `95%_upper`,
+    lower_2.5 = `95%_lower`
+  )
+
+# Save to CSV
+write_csv(final_fc, "sensor198_forecast.csv")
+```
