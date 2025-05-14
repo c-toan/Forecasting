@@ -111,6 +111,7 @@ mean_traffic_by_holiday <- df %>%
 # Plot
 ggplot(mean_traffic_by_holiday, aes(x = holiday, y = mean_traffic)) +
   geom_col(width = 0.8, fill = "lightblue") +
+  geom_text(aes(label = round(mean_traffic, 3)), vjust = -0.5) +
   labs(
     title = "Mean Traffic by Holiday Status",
     x = "Day Type",
@@ -118,6 +119,8 @@ ggplot(mean_traffic_by_holiday, aes(x = holiday, y = mean_traffic)) +
   ) +
   theme_minimal()
 ```
+
+This shows that traffic during the holidays is much less dense, usually people do not work and therefore do not commute and the shops are closed further reducing traffic.
 
 ## Monthly seasonality
 
