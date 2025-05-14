@@ -80,6 +80,46 @@ ggplot(df, aes(x = traffic)) +
   )
 ```
 
+## Holidays 
+
+```{r}
+
+# Parse the timestamp column (adjust the name if different)
+df$datetime <- ymd_hms(df$datetime)
+
+# Extract the date component
+df$date <- as_date(df$datetime)
+
+# Define the list of holidays in 2015 and 2016
+holidays <- as_date(c(as.POSIXct(
+  "2015-01-01", "2015-01-19", "2015-02-16", "2015-03-31", "2015-05-25",
+  "2015-07-04", "2015-09-07", "2015-10-12", "2015-11-11", "2015-11-26",
+  "2015-11-27", "2015-12-25", "2016-01-01", "2016-01-18", "2016-02-15",
+  "2016-03-31", "2016-05-30", "2016-07-04", "2016-09-05", "2016-10-10",
+  "2016-11-11", "2016-11-24", "2016-11-25", "2016-12-25"
+)))
+
+# Add the holiday indicator
+df <- df %>%
+  mutate(holiday = if_else(datetime %in% holidays, 1L, 0L))
+
+# Compute mean traffic grouped by holiday
+mean_traffic_by_holiday <- df %>%
+  group_by(holiday) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  mutate(holiday = factor(holiday, levels = c(0, 1), labels = c("Non-Holiday", "Holiday")))
+
+# Plot
+ggplot(mean_traffic_by_holiday, aes(x = holiday, y = mean_traffic)) +
+  geom_col(width = 0.8, fill = "lightblue") +
+  labs(
+    title = "Mean Traffic by Holiday Status",
+    x = "Day Type",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal()
+```
+
 ## Monthly seasonality
 
 First, we wanted to see if there were any trends or seasonalities visible when looking at the data of an entire year, separating it by months.
@@ -291,7 +331,6 @@ ggplot(df_daily, aes(x = date, y = mean_traffic)) +
     plot.title = element_text(hjust = 0.5),
     axis.text = element_text(size = 7)
   )
-
 ```
 
 We can already see a clear seasonal weekly trend, the week-ends are almost always marked with a clear decrease in traffic, most likely due to the lack of need for commuting.
@@ -330,6 +369,34 @@ ggplot(df_week, aes(x = hour, y = traffic)) +
     strip.text = element_text(size = 8),
     axis.text.x = element_text(size = 8)
 )
+
+# Step 1: Add weekday and hour columns
+df_summary <- df %>%
+  mutate(
+    weekday = factor(weekdays(datetime),
+                     levels = c("Monday", "Tuesday", "Wednesday", "Thursday",
+                                "Friday", "Saturday", "Sunday")),
+    hour = hour(datetime)
+  ) %>%
+  group_by(weekday, hour) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  ungroup()
+
+# Step 2: Plot the average traffic
+ggplot(df_summary, aes(x = hour, y = mean_traffic)) +
+  geom_line() +
+  facet_wrap(~ weekday, ncol = 3) +
+  labs(
+    title = "Average Hourly Traffic by Day of the Week",
+    x = "Hour of Day",
+    y = "Average Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    strip.text = element_text(size = 8),
+    axis.text.x = element_text(size = 8)
+  )
 ```
 
 The traffic tends to be more dense on commuting hours on weekdays, which we expected from the start, showing the higher volume of traffic due to people going to and from their office in the morning and evening (around 8am and 4pm). This is a trend we could already predict given the data was all gathered from before the COVID-19 pandemic and people would rarely choose or even be given the option of work from home. On weekends we see much less traffic, especially on Sunday. Furthermore, the traffic on week-ends is much more constant.
