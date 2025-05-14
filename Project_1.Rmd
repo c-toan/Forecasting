@@ -83,7 +83,6 @@ ggplot(df, aes(x = traffic)) +
 ## Holidays 
 
 ```{r}
-
 # Parse the timestamp column (adjust the name if different)
 df$datetime <- ymd_hms(df$datetime)
 
@@ -397,6 +396,7 @@ ggplot(df_summary, aes(x = hour, y = mean_traffic)) +
     strip.text = element_text(size = 8),
     axis.text.x = element_text(size = 8)
   )
+
 ```
 
 The traffic tends to be more dense on commuting hours on weekdays, which we expected from the start, showing the higher volume of traffic due to people going to and from their office in the morning and evening (around 8am and 4pm). This is a trend we could already predict given the data was all gathered from before the COVID-19 pandemic and people would rarely choose or even be given the option of work from home. On weekends we see much less traffic, especially on Sunday. Furthermore, the traffic on week-ends is much more constant.
