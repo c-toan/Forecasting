@@ -17,11 +17,19 @@ library(scales)
 
 # Step 1: Exploration and Visualization
 
+We started by loading the data.
+
 ```{r}
 # Load the data
 df <- read_csv("~/Desktop/Forecasting/traffic_data.csv")
 df <- df[-1, ]  # Remove first row with sensor URLs
+```
 
+## Sensor 198
+
+We then converted it to the proper format, by only choosing to keep the data from our own Sensor (number 198).
+
+```{r}
 # Convert to proper format
 df <- df %>%
   mutate(
@@ -30,23 +38,66 @@ df <- df %>%
     ) %>%
   select(datetime, traffic) %>%
   as_tsibble(index = datetime)
+```
 
+## Time series 
+
+## We can now see the full time series. 
+
+```{r}
 # Full time series
-df %>% autoplot(traffic) + labs(title = "Traffic at Sensor 198", y = "Volume")
+df %>% autoplot(traffic)
 
+ggplot(df, aes(x = datetime, y = traffic)) +
+  geom_line(color = "black") +
+  labs(
+    title = "Traffic at Sensor 198",
+    x = "Time",
+    y = "Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+```
 
+We can see that there is a lot of data and many many values, making this graph very hard to read or find clear trends.
+
+Therefore, we decided to explore a few of the initial visualizations to try to find some patterns.
+
+## Traffic distribution 
+
+To get a better overview of the distribution of the traffic we have also included a simple graph showing the most frequent normalized traffic volume. As a result we can see that the most common is 0.05.
+
+```{r}
+# Traffic distribution 
+ggplot(df, aes(x = traffic)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Traffic Values", x = "Traffic", y = "Count") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+## Monthly seasonality 
+
+First, we wanted to see if there were any trends or seasonalities visible when looking at the data of an entire year, separating it by months.
+
+We can now see the data for all of the year 2015.
+
+We have also included the data for all of the year 2016.
+
+```{r}
 # Monthly seasonality
 df %>% gg_season(traffic, period = "month")
-
-
-df_monthly$month <- as.Date(df_monthly$month)
 
 
 # Ensure datetime is in correct format
 df <- df %>%
   mutate(datetime = as.POSIXct(datetime))
 
-# Aggregate monthly mean traffic
+# Aggregate monthly mean traffic for 2015
 df_monthly <- df %>%
   filter(year(datetime) == 2015) %>%
   mutate(month = floor_date(datetime, unit = "month")) %>%
@@ -54,7 +105,7 @@ df_monthly <- df %>%
   summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
   ungroup()
 
-# Plot monthly mean traffic
+# Plot monthly mean traffic for 2015 
 ggplot(df_monthly, aes(x = month, y = mean_traffic)) +
   geom_line(color = "steelblue") +
   geom_point(size = 2) +
@@ -65,22 +116,56 @@ ggplot(df_monthly, aes(x = month, y = mean_traffic)) +
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.title = element_text(hjust = 0.5),
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-# Weekly seasonality
+# Aggregate monthly mean traffic for 2016
+df_monthly <- df %>%
+  filter(year(datetime) == 2016) %>%
+  mutate(month = floor_date(datetime, unit = "month")) %>%
+  group_by(month) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  ungroup()
 
+# Plot monthly mean traffic for 2016
+ggplot(df_monthly, aes(x = month, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 2) +
+  labs(
+    title = "Monthly Mean Traffic – 2016",
+    x = "Month",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+These first graphs already show some potential changes, specifically the large increase in traffic in the year 2016 compared to 2015. This could be due to many factors including economic growth, population growth or even an increase in tourist.
+
+## Weekly seasonality
+
+Then, we explored the potential of a visible trend or seasonality when looking at the data of an entire month, separating it by days and marking the start of each new week (the months always start on Mondays).
+
+To have the best estimation possible, we have chosen five months at random over the course of the two years.
+
+```{r}
+# Weekly seasonality
 df %>% gg_season(traffic, period = "week")
 
-# Step 1: Aggregate traffic per day
+
+#June 2015
+#Aggregate traffic per day
 df_daily <- df %>%
   filter(datetime >= as.POSIXct("2015-06-01") & datetime < as.POSIXct("2015-06-29")) %>%
   mutate(date = as.Date(datetime)) %>%
   group_by(date) %>%
   summarise(mean_traffic = mean(traffic, na.rm = TRUE))
 
-# Step 2: Plot daily mean
+#Plot daily mean
 ggplot(df_daily, aes(x = date, y = mean_traffic)) +
   geom_line(color = "steelblue") +
   labs(
@@ -90,39 +175,42 @@ ggplot(df_daily, aes(x = date, y = mean_traffic)) +
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.title = element_text(hjust = 0.5),
     axis.text = element_text(size = 7)
   )
 
-# Step 1: Aggregate traffic per day
+#August 2015
+#Aggregate traffic per day
 df_daily <- df %>%
-  filter(datetime >= as.POSIXct("2015-10-05") & datetime < as.POSIXct("2015-11-02")) %>%
+  filter(datetime >= as.POSIXct("2015-08-03") & datetime < as.POSIXct("2015-08-31")) %>%
   mutate(date = as.Date(datetime)) %>%
   group_by(date) %>%
   summarise(mean_traffic = mean(traffic, na.rm = TRUE))
 
-# Step 2: Plot daily mean
+#Plot daily mean
 ggplot(df_daily, aes(x = date, y = mean_traffic)) +
   geom_line(color = "steelblue") +
   labs(
-    title = "Daily Mean Traffic – October 2015 starting on a Monday",
+    title = "Daily Mean Traffic – August 2015 starting on a Monday",
     x = "Date",
     y = "Mean Traffic"
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.title = element_text(hjust = 0.5),
     axis.text = element_text(size = 7)
   )
 
-# Step 1: Aggregate traffic per day
+
+#September 2015
+#Aggregate traffic per day
 df_daily <- df %>%
   filter(datetime >= as.POSIXct("2015-08-31") & datetime < as.POSIXct("2015-09-28")) %>%
   mutate(date = as.Date(datetime)) %>%
   group_by(date) %>%
   summarise(mean_traffic = mean(traffic, na.rm = TRUE))
 
-# Step 2: Plot daily mean
+#Plot daily mean
 ggplot(df_daily, aes(x = date, y = mean_traffic)) +
   geom_line(color = "steelblue") +
   labs(
@@ -132,13 +220,90 @@ ggplot(df_daily, aes(x = date, y = mean_traffic)) +
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.title = element_text(hjust = 0.5),
     axis.text = element_text(size = 7)
   )
 
 
-# Daily seasonality 
+#October 2015
+#Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2015-10-05") & datetime < as.POSIXct("2015-11-02")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
 
+#Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – October 2015 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 7)
+  )
+
+#March 2016 
+#Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2016-03-07") & datetime < as.POSIXct("2016-04-04")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
+
+#Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – March 2016 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 7)
+  )
+
+
+#August 2016
+#Aggregate traffic per day
+df_daily <- df %>%
+  filter(datetime >= as.POSIXct("2016-08-01") & datetime < as.POSIXct("2016-08-29")) %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE))
+
+#Plot daily mean
+ggplot(df_daily, aes(x = date, y = mean_traffic)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Daily Mean Traffic – August 2016 starting on a Monday",
+    x = "Date",
+    y = "Mean Traffic"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 7)
+  )
+
+```
+
+We can already see a clear seasonal weekly trend, the week-ends are almost always marked with a clear decrease in traffic, most likely due to the lack of need for commuting.
+
+We can also see that months that are very popular to be holidays, show less signs of this trend.
+
+Let's now see if we can see this "commute trend" on the daily seasonality results.
+
+## Daily seasonality  
+
+```{r}
+# Daily seasonality 
 # Filter for a random week in the middle of September 2015 and extract weekday + hour
 df_week <- df %>%
   filter(datetime >= as.POSIXct("2015-09-15") & datetime < as.POSIXct("2015-09-22")) %>%
@@ -161,31 +326,20 @@ ggplot(df_week, aes(x = hour, y = traffic)) +
   ) +
   theme_minimal()+
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    plot.title = element_text(hjust = 0.5), 
     strip.text = element_text(size = 8),
     axis.text.x = element_text(size = 8)
 )
+```
 
+The traffic tends to be more dense on commuting hours on weekdays, which we expected from the start, showing the higher volume of traffic due to people going to and from their office in the morning and evening (around 8am and 4pm). This is a trend we could already predict given the data was all gathered from before the COVID-19 pandemic and people would rarely choose or even be given the option of work from home. On weekends we see much less traffic, especially on Sunday. Furthermore, the traffic on week-ends is much more constant.
 
-# Traffic distribution 
-ggplot(df, aes(x = traffic)) +
-  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
-  labs(title = "Distribution of Traffic Values", x = "Traffic", y = "Count") +
-  theme_minimal()
+## Autocorrelation function (ACF)
 
-
-
+```{r}
 # ACF
 df %>% ACF(traffic) %>% autoplot()
 ```
-
-In this first step, we start by loading and plotting the traffic data by hour from Sensor 198 to find some patterns.
-
-The initial time series plot shows clear weekly and daily seasonality:
-
-The traffic tends to be more dense on commuting hours on weekdays, which we expected from the start, showing the higher volume of traffic due to people going to and from their office in the morning and evening (around 9am and 4pm). This is a trend we could already predict given the data was all gathered from before the COVID-19 pandemic and people would rarely choose or even be given the option of work from home. On weekends we see much less traffic, especially on Sunday. Furthermore, the traffic on week-ends is much more constant.
-
-To get a better overview of the distribution of the traffic we have also included a simple graph showing the most frequent normalized traffic volume. As a result we can see that the most common is 0.05.
 
 Finally, the autocorrelation function (ACF) plot confirms these patterns, it shows strong autocorrelation at lags corresponding to 24 hours (daily). This means that the series is highly seasonal and autocorrelated, which is why we have decided to apply a SARIMA model.
 
