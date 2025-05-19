@@ -1,0 +1,318 @@
+---
+title: "Forecasting Traffic at Sensor 198"
+author: "Ana Blanco Lara, Imen Rabouhi Announ, Xavier Dubrul & Camille Toan"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tsibble)
+library(lubridate)
+library(fable)
+library(feasts)
+library(readr)
+library(zoo)
+library(tidyr)
+```
+
+# Step 1: Exploration and Visualization
+
+```{r}
+# Load and preprocess the traffic data
+df_traffic <- read_csv("traffic_data.csv")[-1, ]  # Remove header row
+df_traffic <- df_traffic %>%
+  mutate(
+    datetime = dmy_hm(Time),
+    traffic = as.numeric(Sensor198)
+  ) %>%
+  select(datetime, traffic) %>%
+  as_tsibble(index = datetime)
+```
+
+## Time Series Overview
+
+```{r}
+df_traffic %>% autoplot(traffic) +
+  labs(title = "Traffic at Sensor 198", x = "Time", y = "Traffic")
+```
+
+## Traffic Distribution
+
+```{r}
+ggplot(df_traffic, aes(x = traffic)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Traffic Values", x = "Traffic", y = "Count")
+```
+
+## Seasonality (Monthly, Weekly)
+
+```{r}
+gg_season(df_traffic, traffic, period = "month") +
+  labs(title = "Monthly Seasonality", x = "Date", y = "Traffic")
+
+gg_season(df_traffic, traffic, period = "week") +
+  labs(title = "Weekly Seasonality", x = "Date", y = "Traffic")
+```
+
+## Dailly Pattern
+
+```{r}
+df_traffic %>%
+  mutate(weekday = factor(weekdays(datetime), levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")),
+         hour = hour(datetime)) %>%
+  group_by(weekday, hour) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  ggplot(aes(x = hour, y = mean_traffic)) +
+  geom_line() +
+  facet_wrap(~ weekday, ncol = 3) +
+  labs(title = "Average Hourly Traffic by Day", x = "Hour", y = "Traffic")
+```
+
+## Autocorrelation
+
+```{r}
+df_traffic %>% ACF(traffic) %>% autoplot() +
+  labs(title = "Autocorrelation Function")
+```
+
+## Holiday Impact
+
+```{r}
+# Add holiday flag
+df_traffic <- df_traffic %>%
+  mutate(date = as_date(datetime))
+
+holidays <- as_date(c(
+  "2015-01-01", "2015-01-19", "2015-02-16", "2015-03-31", "2015-05-25",
+  "2015-07-04", "2015-09-07", "2015-10-12", "2015-11-11", "2015-11-26",
+  "2015-11-27", "2015-12-25", "2016-01-01", "2016-01-18", "2016-02-15",
+  "2016-03-31", "2016-05-30", "2016-07-04", "2016-09-05", "2016-10-10",
+  "2016-11-11", "2016-11-24", "2016-11-25", "2016-12-25"
+))
+
+df_traffic <- df_traffic %>% mutate(holiday = as.integer(date %in% holidays))
+
+df_traffic %>%
+  group_by(holiday) %>%
+  summarise(mean_traffic = mean(traffic, na.rm = TRUE)) %>%
+  mutate(holiday = factor(holiday, labels = c("Non-Holiday", "Holiday"))) %>%
+  ggplot(aes(x = holiday, y = mean_traffic)) +
+  geom_col(fill = "lightblue") +
+  labs(title = "Mean Traffic by Holiday Status", x = "Day Type", y = "Mean Traffic")
+```
+
+## Weather Impact
+
+```{r}
+weather <- read_csv("~/Desktop/weather_data.csv") %>%  # Replace with your actual filename
+  mutate(
+    date = as_date(`DATE`),  # Replace `DATE` with actual column name
+    precipitation = as.numeric(`PRCP`),  # Replace with actual precipitation column
+    snow = as.numeric(`SNOW`)            # Replace with actual snow column
+  ) %>%
+  select(date, precipitation, snow) %>%
+  drop_na()
+
+df_traffic <- df_traffic %>%
+  mutate(date = as_date(datetime))
+
+df_traffic <- weather %>%
+  left_join(df_traffic, by = "date")
+
+df_traffic <- df_traffic %>%
+  select(datetime, date, traffic, holiday, precipitation, snow)
+```
+
+```{r}
+# Effect of precipitation on traffic
+ggplot(df_traffic, aes(x = precipitation, y = traffic)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "loess", color = "blue") +
+  labs(title = "Traffic vs Precipitation", x = "Precipitation (inches)", y = "Traffic")
+
+# Effect of snow on traffic
+ggplot(df_traffic, aes(x = snow, y = traffic)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "loess", color = "steelblue") +
+  labs(title = "Traffic vs Snowfall", x = "Snowfall (inches)", y = "Traffic")
+```
+
+# Step 2: Cleaning and Wrangling
+
+```{r}
+# 1. Fix duplicate datetime entries (average values per hour if needed)
+df_clean <- df_traffic %>%
+  group_by(datetime) %>%
+  summarise(across(where(is.numeric), mean, na.rm = TRUE), .groups = "drop")
+
+# 2. Convert to a tsibble and fill missing hourly timestamps
+df_clean <- df_clean %>%
+  as_tsibble(index = datetime) %>%
+  fill_gaps()
+
+# 3. Identify and replace full "zero-traffic" days with NA
+zero_days <- df_clean %>%
+  mutate(date = as_date(datetime)) %>%
+  group_by(date) %>%
+  summarise(daily_total = sum(traffic, na.rm = TRUE), .groups = "drop") %>%
+  filter(daily_total == 0) %>%
+  pull(date)
+
+df_clean <- df_clean %>%
+  mutate(date = as_date(datetime)) %>%
+  mutate(traffic = if_else(date %in% zero_days, NA_real_, traffic)) %>%
+  select(-date)
+
+# 4. Interpolate missing values
+df_clean <- df_clean %>%
+  mutate(traffic = na.approx(traffic, na.rm = FALSE))
+
+# 5. Detect outliers with STL decomposition
+decomposition <- df_clean %>%
+  model(STL(traffic ~ season(window = "periodic"), robust = TRUE)) %>%
+  fabletools::components()
+
+iqr <- IQR(decomposition$remainder, na.rm = TRUE)
+
+outliers <- decomposition %>%
+  filter(remainder > quantile(remainder, 0.75, na.rm = TRUE) + 3 * iqr |
+         remainder < quantile(remainder, 0.25, na.rm = TRUE) - 3 * iqr)
+
+decomposition %>% autoplot() +
+  labs(title = "STL Decomposition of Cleaned Traffic Data") +
+  theme_minimal()
+```
+
+# Step 3: Modeling
+
+## 3.1 Train-Test Split
+
+```{r}
+# We'll use the last 744 hours of 2016 (i.e. January 1st 00:00 is excluded) as test set
+train_data <- df_clean %>% filter(datetime < ymd_h("2016-12-01 00"))
+test_data <- df_clean %>% filter(datetime >= ymd_h("2016-12-01 00"))
+
+# Sanity check: confirm the size of test set (should be 744 rows)
+nrow(test_data)  # should print 744
+```
+
+## 3.2 Model fitting (Training Data)
+```{r}
+# Fit models on training data (for validation only)
+fit_ets_train <- train_data %>%
+  model(ETS(traffic ~ error("A") + trend("N") + season("A")))
+
+fit_arima_train <- train_data %>%
+  model(ARIMA(traffic))
+
+fit_arima_xreg_train <- train_data %>%
+  model(ARIMA(traffic ~ holiday + precipitation + snow))
+
+fit_tslm_train <- train_data %>%
+  model(TSLM(traffic ~ trend() + season() + holiday + precipitation + snow))
+```
+
+### Model Summaries
+
+```{r}
+report(fit_ets_train)
+report(fit_arima_train)
+report(fit_arima_xreg_train)
+report(fit_tslm_train)
+```
+
+### Model Accuracy Comparison
+
+```{r}
+bind_rows(
+  accuracy(fit_ets_train),
+  accuracy(fit_arima_train),
+  accuracy(fit_arima_xreg_train),
+  accuracy(fit_tslm_train)
+)
+```
+
+## 3.3 Forecast on December 2016 (Validation)
+```{r}
+# Forecast from each model
+fc_ets_val <- forecast(fit_ets_train, new_data = test_data)
+fc_arima_val <- forecast(fit_arima_train, new_data = test_data)
+fc_arima_xreg_val <- forecast(fit_arima_xreg_train, new_data = test_data)
+fc_tslm_val <- forecast(fit_tslm_train, new_data = test_data)
+
+# Combine forecasts for plotting
+fc_val_all <- bind_rows(
+  fc_ets_val %>% mutate(model = "ETS"),
+  fc_arima_val %>% mutate(model = "ARIMA"),
+  fc_arima_xreg_val %>% mutate(model = "ARIMA + XREG"),
+  fc_tslm_val %>% mutate(model = "TSLM")
+)
+
+# Plot
+fc_val_all %>%
+  autoplot(test_data, level = NULL) +
+  autolayer(test_data, traffic, color = "black", size = 0.7, linetype = "dashed") +
+  facet_wrap(~model, ncol = 1, scales = "free_y") +
+  labs(
+    title = "Forecast vs Actual Traffic – December 2016",
+    subtitle = "Dashed = Actual Traffic, Colored = Model Forecast",
+    x = "Date", y = "Traffic"
+  ) +
+  theme_minimal()
+```
+
+### Forecast Accuracy Comparison
+
+```{r}
+bind_rows(
+  accuracy(fc_ets_val, test_data) %>% mutate(model = "ETS"),
+  accuracy(fc_arima_val, test_data) %>% mutate(model = "ARIMA"),
+  accuracy(fc_arima_xreg_val, test_data) %>% mutate(model = "ARIMA + XREG"),
+  accuracy(fc_tslm_val, test_data) %>% mutate(model = "TSLM")
+)
+```
+
+# Step 4: Forecasting and Validation
+
+```{r}
+# ETS
+fit_ets <- df_clean %>%
+  model(ETS(traffic ~ error("A") + trend("N") + season("A")))
+
+# ARIMA
+fit_arima <- df_clean %>%
+  model(ARIMA(traffic))
+
+# Forecast horizon: 744 hours = entire January 2017
+horizon <- "744 hours"
+
+# Forecast from each model
+fc_ets <- fit_ets %>% forecast(h = horizon)
+fc_arima <- fit_arima %>% forecast(h = horizon)
+
+# Visualize the forecasts
+fc_ets %>%
+  autoplot(df_clean) +
+  labs(title = "ETS Forecast for January 2017",
+       x = "Time", y = "Traffic")
+
+fc_arima %>%
+  autoplot(df_clean) +
+  labs(title = "ARIMA Forecast for January 2017",
+       x = "Time", y = "Traffic")
+
+bind_rows(
+  fc_ets %>% mutate(model = "ETS"),
+  fc_arima %>% mutate(model = "ARIMA")
+) %>%
+  autoplot(df_clean, level = NULL) +
+  labs(title = "Forecast Comparison (Jan 2017)", y = "Traffic", color = "Model")
+```
+
+
+
+
+
+
+
