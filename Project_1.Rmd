@@ -67,6 +67,33 @@ df_traffic %>%
   geom_line() +
   facet_wrap(~ weekday, ncol = 3) +
   labs(title = "Average Hourly Traffic by Day", x = "Hour", y = "Traffic")
+
+# Filter for a random week in the middle of September 2015 and extract weekday + hour
+df_week <- df %>%
+  filter(datetime >= as.POSIXct("2015-09-15") & datetime < as.POSIXct("2015-09-22")) %>%
+  mutate(
+    weekday = factor(weekdays(datetime),
+        levels = c("Monday", "Tuesday", "Wednesday", "Thursday",
+                                "Friday", "Saturday", "Sunday")),
+    weekday_num = as.numeric(weekday),  
+    offset_traffic = traffic + (7 - weekday_num) * 0.15,
+    hour = hour(datetime)
+  )
+
+# Plot: hourly traffic per day (faceted by weekday)
+ggplot(df_week, aes(x = hour, y = traffic)) +
+  geom_line() +
+  facet_wrap(~ weekday, ncol = 3) +
+  labs(
+    title = "Hourly Traffic by Day – Week in the middle of September 2015",
+    x = "Hour of Day", y = "Traffic"
+  ) +
+  theme_minimal()+
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"), 
+    strip.text = element_text(size = 8),
+    axis.text.x = element_text(size = 8)
+)
 ```
 
 ## Autocorrelation

@@ -198,6 +198,7 @@ nrow(test_data)  # should print 744
 ```
 
 ## 3.2 Model fitting (Training Data)
+
 ```{r}
 # Fit models on training data (for validation only)
 fit_ets_train <- train_data %>%
@@ -234,6 +235,7 @@ bind_rows(
 ```
 
 ## 3.3 Forecast on December 2016 (Validation)
+
 ```{r}
 # Forecast from each model
 fc_ets_val <- forecast(fit_ets_train, new_data = test_data)
@@ -309,10 +311,3 @@ bind_rows(
   autoplot(df_clean, level = NULL) +
   labs(title = "Forecast Comparison (Jan 2017)", y = "Traffic", color = "Model")
 ```
-
-
-
-
-
-
-
